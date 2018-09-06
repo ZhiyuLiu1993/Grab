@@ -13,13 +13,15 @@ import math
 from bs4 import BeautifulSoup
 from builtins import str
 from functools import reduce
-from urlparse import urlparse
-from urlparse import urlsplit
-from urlparse import parse_qs
+from urllib.parse import urlparse
+from urllib.request import urlopen
+from urllib.request import Request
+from urllib.parse import urlencode
+from urllib.parse import urlsplit
 import urllib
 import getopt
 
-params = {};
+params = {}
 headers = {
     'User-Agent': 'Mozilla/5.0 (Windows NT 6.1; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/65.0.3325.181 Safari/537.36'
     , 'Connection': 'keep-alive'
@@ -81,14 +83,15 @@ def requests_get_text(url, retrys=3, params=params, headers=headers):
 
 
 def dgtle_main():
-    os.chdir("dgtle_data")
+    #原始网站： http://www.dgtle.com/dgtleforum.php
+    os.chdir("D:/网页抓取/dgtle_data")
 
     #TODO:  Deduplication(Done)
 
     # get thread tid url
     base_url = "https://api.yii.dgtle.com/v2/forum-thread/thread?token=&dateline="
     time_stamp = int(time.time()) - 60
-    print time_stamp
+    print(time_stamp)
     # time_stamp = 1535358490
     sub_url = "&page=1&perpage=24&typeid=0"
 
@@ -118,7 +121,7 @@ def dgtle_main():
         # start = 1
         # stop = 5
         for i in range(time_stamp, 1514736000, -60000):
-            print i
+            print(i)
             all_url = base_url + str(i) + sub_url
             # print all_url
             # url = "http://www.dgtle.com/dgtleforum.php"
@@ -129,11 +132,12 @@ def dgtle_main():
             # for brand_tag in html_soup.find_all("h5", class_="z-feed-title"):
             for brand_tag in html_soup.find_all("tid"):
                 brand_name = brand_tag.get_text()
-
+                count += 1
+                if count % 300 == 0:
+                    file_num += 1
                 if brand_name in dgtle_dup:
                     continue
                 dgtle_dup[brand_name] = {"tid": brand_name}
-                count += 1
 
                 brandInfos = {}
 
@@ -141,7 +145,7 @@ def dgtle_main():
 
                 brandInfos["source_url"] = base_title_url + brand_name + sub_title_url
 
-                print brandInfos["source_url"]
+                print(brandInfos["source_url"])
 
                 brand_soup_html = requests_get_text(brandInfos["source_url"])
 
@@ -172,7 +176,7 @@ def dgtle_main():
                     split_tag = title_zone.find("span").get_text()
                     time_str = time_str.split(split_tag)[1]
                     time_str = time_str.strip()
-                    time_str = "2018-" + time_str + ":00"
+                    time_str = "2018-" + time_str + ":00"  #FIXME: if year before 2018 note this line
                     # print time_str
                     time_arr = time.strptime(time_str, "%Y-%m-%d %H:%M:%S")
                     time_stamp = int(time.mktime(time_arr))
@@ -247,7 +251,7 @@ def dgtle_main():
                                     continue
                         else:
                             for content_tag in content_zone.next_elements:
-                                print content_tag
+                                print(content_tag)
                         brandInfos["content"].append(content_all)
                         # print content_all["text"]
 
@@ -335,7 +339,7 @@ def dgtle_main():
                 # print comment_list_zone
                 thread_num = comment_list_zone["data-tid"]
                 # print thread_num
-                com_num = min(brandInfos["comment_num"], 10)
+                com_num = min(int(brandInfos["comment_num"]), 10)
                 # print com_num
                 brandInfos["comment_list"] = []
 
@@ -349,12 +353,13 @@ def dgtle_main():
                 comment_data = BeautifulSoup(comment_html, "lxml")
 
                 if comment_data:
-                    for com_first in comment_data.find_all("comment"):
-                        if com_num <= 0:
-                            break
-                        # print com_first.get_text()
-                        brandInfos["comment_list"].append(com_first.get_text())
-                        com_num -= 1
+                    if com_num > 0:
+                        for com_first in comment_data.find_all("comment"):
+                            if com_num <= 0:
+                                break
+                            # print com_first.get_text()
+                            brandInfos["comment_list"].append(com_first.get_text())
+                            com_num -= 1
 
                 like_zone = brand_soup.find("div", class_="like-num")
                 like_tag = like_zone.find("span")
@@ -367,18 +372,13 @@ def dgtle_main():
                 #     brandInfos[brand_name]["like_num"] = like_tag.get_text()
                 # brandInfosAll.append(brandInfos)
 
-                if count % 300 == 0:
-                    file_num += 1
                 file_name = "dgtle{}.json".format(str(file_num))
                 io.open(file_name, "a+", encoding="utf-8").write(
                     json.dumps(brandInfos, sort_keys=True, ensure_ascii=False))
-                enter_line = '\n'
-                enter_line = enter_line.encode('utf-8')
-                open(file_name, "a+").write(enter_line)
+                io.open(file_name, "a+").write("\n")
 
-                if count % 50 == 0:
-                    io.open("dgtle_dup.json", "w", encoding="utf-8").write(
-                        json.dumps(dgtle_dup, indent=4, sort_keys=True, ensure_ascii=False))
+                io.open("dgtle_dup.json", "w", encoding="utf-8").write(
+                    json.dumps(dgtle_dup, indent=4, sort_keys=True, ensure_ascii=False))
 
                 # time.sleep(10)
 
@@ -393,184 +393,8 @@ def dgtle_main():
     # 保存品牌信息
     #     io.open("smzdm.json", "w", encoding="utf-8").write(
     #         json.dumps(brandInfos, sort_keys=True, indent=4, ensure_ascii=False))
-    print count
+    print(count)
 
-
-
-def smzdm_main():
-    brand_cnt = 0
-    os.chdir("smzdm_data")
-    # burl_base = "https://post.smzdm.com"
-
-    brandInfosAll = []
-
-    # if os.path.exists("smzdm.json"):
-    #     brandInfos = json.loads(io.open("smzdm.json", 'r', encoding='utf-8').read())
-
-    brandDouble = []
-    file_count = 27
-    count = 0
-
-    for k in range(0, file_count):
-
-        try:
-
-            # f_raw_html = io.open("post.smzdm.com.html", 'r', encoding='utf-8')
-            # for i in range(0, 3):
-            #     r = requests.get(burl_base, params=params, headers=headers)
-            # f_raw_html = urllib.urlopen(burl_base)
-            start = k*15 + 1
-            stop = start + 15
-            # start = 1
-            # stop = 5
-
-            for i in range(start, stop):
-                print i
-                url = "https://post.smzdm.com/p{}/".format(str(i))
-                # print f_raw_html.read()
-                f_raw_html = requests_get_text(url)
-                html_soup = BeautifulSoup(f_raw_html, "lxml")
-
-
-                # print bandInfos
-                # for brand_tag in html_soup.find_all("h5", class_="z-feed-title"):
-                for brand_tag in html_soup.find_all("a", target="_blank", href=re.compile("https://post.smzdm.com/p/[1-9]\d*/$")):
-                    brand_name = brand_tag.get_text()
-
-                    if brand_name.strip() in brandDouble:
-                        continue
-                    brandDouble.append(brand_name.strip())
-                    count += 1
-
-                    brandInfos = {}
-
-                    # print source_url
-                    #if brand_name in brandInfos:
-                        # print(source_url, " has graped")
-                        # print("graped")
-                     #   continue
-
-                    #brandInfos[brand_name] = {"source_url": brand_tag["href"]}
-                    brand_soup_html = requests_get_text(brand_tag["href"])
-                    # print brand_tag["href"]
-
-                    #FIXME:  now comment
-                    brandInfos["source_url"] = brand_tag["href"]
-                    brandInfos["source_html"] = brand_soup_html
-                    brand_soup = BeautifulSoup(brand_soup_html, "lxml")
-                    title_tag = brand_soup.find("meta", attrs={"property": "og:title"})
-                    if title_tag:
-                        brandInfos["title"] = title_tag["content"]
-                        # print title_tag["content"]
-                    time_tag = brand_soup.find("span", class_="xilie", attrs={"itemprop": "author"})
-                    null_name = time_tag.find("span", class_="grey", itemprop="name")
-                    time_str = ""
-                    if null_name:
-                        time_str = null_name.find_next_sibling("span", class_="grey").get_text().strip()
-                        brandInfos["author_name"] = null_name.get_text()
-                        # author_figure_zone = brand_soup.find("div", "user_tx")
-                        # author_figure_tag = author_figure_zone.find("img")
-                        brandInfos["author_figureurl"] = ""
-                    else:
-                        time_str = time_tag.find("span", class_="grey").get_text().strip()
-                        author_tag = brand_soup.find("a", attrs={"itemprop": "name"})
-                        brandInfos["author_name"] = author_tag.get_text()
-                        author_figure_zone = brand_soup.find("div", "user_tx")
-                        author_figure_tag = author_figure_zone.find("img")
-                        brandInfos["author_figureurl"] = author_figure_tag["src"]
-                    # time_str.decode('string_escape')
-                    # time_str.replace("\r\n", " ")
-                    # time_str.strip()
-                    # print time_str
-
-                    print brandInfos["source_url"]
-                    time_arr = time.strptime(time_str, "%Y-%m-%d %H:%M:%S")
-                    time_stamp = int(time.mktime(time_arr))
-                    brandInfos["create_time"] = time_stamp
-
-
-                    # print brandInfos[brand_name]["create_time"]
-                        # print time_stamp
-
-
-                    # print brandInfos[brand_name]["author_name"]
-
-                    category_tag = author_tag.find_next_sibling("a")
-                    if category_tag:
-                        brandInfos["category"] = category_tag.get_text()
-
-                    like_tag = brand_soup.find("span", class_="Number").get_text().strip()
-                    brandInfos["like_num"] = like_tag
-                    # like_num = like_tag.get_text()
-                    # like_num.strip()
-
-                    comment_tag = brand_soup.find("em", class_="commentNum").get_text()
-                    brandInfos["comment_num"] = comment_tag
-                    # print brandInfos[brand_name]["comment_num"]
-
-
-                    # print brandInfos[brand_name]["author_figure"]
-
-                    comment_list_zone = brand_soup.find("div", class_="comment_wrap", id="comment")
-                    com_num = min(comment_tag, 10)
-                    # print com_num
-                    brandInfos["comment_list"] = []
-
-                    # TODO: now tag is null
-                    brandInfos["tags"] = []
-
-                    tag_tag = brand_soup.find("body", itemtype="//schema.org/NewsArticle")
-                    # print tag_tag
-
-                    if comment_list_zone:
-                        for com_first in comment_list_zone.find_all("span", itemprop="description"):
-                            if com_num <= 0:
-                                break
-                            brandInfos["comment_list"].append(com_first.get_text())
-                            com_num -= 1
-                            # print com_first.get_text()
-
-                    content_zone = brand_soup.find("article")
-                    # print content_zone
-                    brandInfos["content"] = []
-                    for content_tag in content_zone.find_all("p", itemprop="description"):
-                        content_all = {}
-                        img_tag = content_tag.find("img")
-                        if img_tag:
-                            content_all["type"] = 2   #image
-                            content_all["text"] = img_tag["src"]
-                        else:
-                            content_all["type"] = 3   #text
-                            content_all["text"] = content_tag.get_text()
-                            if content_all["text"] == "":
-                                continue
-                        brandInfos["content"].append(content_all)
-                        # print content_all["text"]
-
-
-                    # if like_tag
-                    #     brandInfos[brand_name]["like_num"] = like_tag.get_text()
-                    #brandInfosAll.append(brandInfos)
-                    file_name = "smzdm{}.json".format(str(k))
-                    io.open(file_name, "a+", encoding="utf-8").write(
-                        json.dumps(brandInfos, sort_keys=True, ensure_ascii=False))
-                    enter_line = '\n'
-                    enter_line = enter_line.encode('utf-8')
-                    open(file_name, "a+").write(enter_line)
-            # time.sleep(10)
-            # brandInfosAll = []
-
-        except Exception as err:
-
-
-            print("-" * 60)
-            traceback.print_exc(file=sys.stdout)
-            print("-" * 60)
-
-        # 保存品牌信息
-        #     io.open("smzdm.json", "w", encoding="utf-8").write(
-        #         json.dumps(brandInfos, sort_keys=True, indent=4, ensure_ascii=False))
-    print count
 
 def usage():
     print(sys.argv[0] + ' -g xxxxs')
